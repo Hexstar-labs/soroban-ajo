@@ -173,6 +173,59 @@ export const useWallet = () => {
         [saveWalletState]
     );
 
+    // Connect to Lobstr wallet
+    const connectLobstr = useCallback(
+        async (network: string = 'testnet'): Promise<WalletConnectionResult> => {
+            if (!window.lobstrVault) {
+                return {
+                    success: false,
+                    error: {
+                        code: 'WALLET_NOT_INSTALLED',
+                        message: 'Lobstr Vault extension is not installed. Please install it from the Chrome Web Store or use the Lobstr mobile app.',
+                        walletType: 'lobstr',
+                    },
+                };
+            }
+
+            try {
+                const publicKey = await window.lobstrVault.getPublicKey();
+
+                if (!publicKey) {
+                    throw new Error('Failed to get public key from Lobstr Vault');
+                }
+
+                const newState: WalletState = {
+                    isConnected: true,
+                    address: publicKey,
+                    walletType: 'lobstr',
+                    network: network as 'testnet' | 'mainnet' | 'futurenet',
+                    publicKey,
+                };
+
+                setWalletState(newState);
+                saveWalletState(newState);
+
+                return {
+                    success: true,
+                    address: publicKey,
+                    publicKey,
+                };
+            } catch (err) {
+                const error = err as any;
+                const walletError: WalletError = {
+                    code: error.code || 'CONNECTION_FAILED',
+                    message: error.message || 'Failed to connect to Lobstr Vault. Please make sure you have set up your vault account.',
+                    walletType: 'lobstr',
+                };
+                return {
+                    success: false,
+                    error: walletError,
+                };
+            }
+        },
+        [saveWalletState]
+    );
+
     // Main connect function
     const connect = useCallback(
         async ({ walletType, network = 'testnet' }: ConnectWalletParams): Promise<WalletConnectionResult> => {
@@ -185,6 +238,8 @@ export const useWallet = () => {
                 result = await connectFreighter(network);
             } else if (walletType === 'albedo') {
                 result = await connectAlbedo(network);
+            } else if (walletType === 'lobstr') {
+                result = await connectLobstr(network);
             } else {
                 result = {
                     success: false,
@@ -202,7 +257,7 @@ export const useWallet = () => {
             setIsLoading(false);
             return result;
         },
-        [connectFreighter, connectAlbedo]
+        [connectFreighter, connectAlbedo, connectLobstr]
     );
 
     // Disconnect wallet
