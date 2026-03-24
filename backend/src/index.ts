@@ -1,12 +1,61 @@
 import dotenv from 'dotenv'
+import { errorHandler } from './middleware/errorHandler'
+import { requestLogger } from './middleware/requestLogger'
 import { logger } from './utils/logger'
 import { startWorkers, stopWorkers } from './jobs/jobWorkers'
 import { startScheduler, stopScheduler } from './cron/scheduler'
-import app from './app'
+import { kycRouter } from './routes/kyc'
 
 dotenv.config()
 
 const PORT = process.env.PORT || 3001
+
+// Middleware
+app.use(helmet())
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL
+      ? [process.env.FRONTEND_URL, 'http://localhost:3000', 'http://localhost:5173']
+      : ['http://localhost:3000', 'http://localhost:5173'],
+    credentials: true,
+  })
+)
+app.use(requestLogger)
+app.set('trust proxy', 1)
+app.use(createDdosProtector())
+app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
+app.use('/api', createIpLimiter('global'))
+
+// API Documentation - Swagger UI
+setupSwagger(app)
+
+// Routes
+app.use('/health', healthRouter)
+app.use('/api/auth', createIpLimiter('auth'), authRouter)
+app.use('/api/groups', createUserLimiter(), groupsRouter)
+app.use('/api/webhooks', createIpLimiter('auth'), webhooksRouter)
+app.use('/api/analytics', createUserLimiter(), analyticsRouter)
+app.use('/api/email', emailRouter)
+app.use('/api/jobs', jobsRouter)
+app.use('/api/gamification', createIpLimiter('expensive'), createUserLimiter(), gamificationRouter)
+app.use('/api/goals', createUserLimiter(), goalsRouter)
+app.use('/api/kyc', kycRouter)
+
+// Disputes
+import { disputesRouter } from './routes/disputes'
+app.use('/api/disputes', disputesRouter)
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'Not found',
+  })
+})
+
+// Error handling
+app.use(errorHandler)
 
 // Start server and keep reference so we can close it on shutdown
 const server = app.listen(PORT, () => {
