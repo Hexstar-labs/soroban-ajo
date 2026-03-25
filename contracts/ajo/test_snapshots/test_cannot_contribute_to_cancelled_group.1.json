@@ -428,20 +428,24 @@
                         "symbol": "late_contributions"
                       },
                       "val": {
+                      },
+                      "val": {
                         "u32": 0
                       }
                     },
                     {
                       "key": {
-                        "symbol": "member"
+                        "symbol": "penalty_rate"
                       },
                       "val": {
                         "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                        "u32": 5
                       }
                     },
                     {
                       "key": {
                         "symbol": "on_time_contributions"
+                        "symbol": "state"
                       },
                       "val": {
                         "u32": 0
@@ -480,6 +484,10 @@
                       },
                       "val": {
                         "u32": 1
+                        "symbol": "token_address"
+                      },
+                      "val": {
+                        "address": "CACMVW2KK4H5FZDFF2AUCAKQTEJMZZWJUIZF23XMRVYQBSXYLHZ6BKWN"
                       }
                     }
                   ]
@@ -1087,6 +1095,11 @@
             "topics": [
               {
                 "symbol": "fn_call"
+              },
+              {
+                "bytes": "04cadb4a570fd2e4652e814101509912cce6c9a2325d6eec8d7100caf859f3e0"
+              },
+              {
               },
               {
                 "bytes": "04cadb4a570fd2e4652e814101509912cce6c9a2325d6eec8d7100caf859f3e0"

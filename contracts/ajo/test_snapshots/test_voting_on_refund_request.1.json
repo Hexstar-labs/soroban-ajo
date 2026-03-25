@@ -417,6 +417,7 @@
                 }
               ]
             },
+            "key": "ledger_key_contract_instance",
             "durability": "persistent"
           }
         },
@@ -644,6 +645,22 @@
               "contract_data": {
                 "ext": "v0",
                 "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+                "key": "ledger_key_contract_instance",
+                "durability": "persistent",
+                "val": {
+                  "contract_instance": {
+                    "executable": {
+                      "wasm": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                    },
+                    "storage": [
+                      {
+                        "key": {
+                          "symbol": "GCOUNTER"
+                        },
+                        "val": {
+                          "u64": 1
+                        }
+                      }
                 "key": "ledger_key_contract_instance",
                 "durability": "persistent",
                 "val": {

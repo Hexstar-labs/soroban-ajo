@@ -157,4 +157,6 @@ pub enum AjoError {
 
     /// Group does not have multi-token configuration.
     NotMultiTokenGroup = 50,
+    /// No notification preferences found for this member.
+    PreferencesNotFound = 48,
 }

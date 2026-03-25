@@ -75,6 +75,20 @@ darkMode: 'class',
         foreground: 'var(--color-foreground)',
         muted: 'var(--color-muted)',
         border: 'var(--color-border)',
+        // Issue #321: dark mode color tokens
+        dark: {
+          bg: {
+            primary: '#0f0f1e',
+            secondary: '#1a1a2e',
+            tertiary: '#25253e',
+          },
+          text: {
+            primary: '#ffffff',
+            secondary: 'rgba(255,255,255,0.7)',
+            muted: 'rgba(255,255,255,0.45)',
+          },
+          border: 'rgba(255,255,255,0.1)',
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
@@ -151,6 +165,15 @@ darkMode: 'class',
         'gradient-stellar-subtle': 'linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(168, 85, 247, 0.05) 100%)',
         'gradient-radial-glow': 'radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 70%)',
         'gradient-mesh': 'radial-gradient(at 20% 30%, rgba(99, 102, 241, 0.15) 0px, transparent 50%), radial-gradient(at 80% 70%, rgba(168, 85, 247, 0.15) 0px, transparent 50%), radial-gradient(at 50% 50%, rgba(139, 92, 246, 0.1) 0px, transparent 50%)',
+        // Issue #317 gradient system
+        'gradient-primary': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        'gradient-success': 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
+        'gradient-warning': 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+        'gradient-info': 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+        'gradient-accent-1': 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+        'gradient-accent-2': 'linear-gradient(135deg, #30cfd0 0%, #330867 100%)',
+        'gradient-primary-dark': 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)',
+        'gradient-success-dark': 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-out',
@@ -161,6 +184,7 @@ darkMode: 'class',
         'scale-in': 'scaleIn 0.2s ease-out',
         'scale-out': 'scaleOut 0.2s ease-in',
         shimmer: 'shimmer 2s infinite linear',
+        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'pulse-soft': 'pulseSoft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         float: 'float 3s ease-in-out infinite',
         'spin-slow': 'spin 3s linear infinite',
@@ -248,6 +272,22 @@ darkMode: 'class',
       transitionTimingFunction: {
         'bounce-in': 'cubic-bezier(0.68, -0.55, 0.265, 1.55)',
         elastic: 'cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+      },
+      // Issue #318: bento grid row sizes
+      gridAutoRows: {
+        'bento-sm': '160px',
+        'bento-md': '200px',
+        'bento-lg': '240px',
+      },
+      // Issue #318: animation delay utilities
+      animationDelay: {
+        75: '75ms',
+        100: '100ms',
+        150: '150ms',
+        200: '200ms',
+        300: '300ms',
+        500: '500ms',
+        700: '700ms',
       },
       zIndex: {
         base: '0',

@@ -486,14 +486,19 @@
                     {
                       "key": {
                         "symbol": "total_contributions"
+                    },
+                    {
+                      "key": {
+                        "symbol": "penalty_rate"
                       },
                       "val": {
-                        "u32": 0
+                        "u32": 5
                       }
                     },
                     {
                       "key": {
                         "symbol": "total_groups_completed"
+                        "symbol": "state"
                       },
                       "val": {
                         "u32": 0
@@ -505,6 +510,10 @@
                       },
                       "val": {
                         "u32": 1
+                        "symbol": "token_address"
+                      },
+                      "val": {
+                        "address": "CACMVW2KK4H5FZDFF2AUCAKQTEJMZZWJUIZF23XMRVYQBSXYLHZ6BKWN"
                       }
                     }
                   ]
