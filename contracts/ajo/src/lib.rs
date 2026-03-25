@@ -28,4 +28,5 @@ pub use contract::AjoContractClient;
 pub use errors::AjoError;
 pub use types::{GroupState, RefundReason, RefundRequest, RefundRecord, RefundVote};
 pub use types::{PayoutOrderingStrategy, PayoutVote, PayoutOrder};
+pub use types::{ReminderType, MemberNotificationPreferences, ReminderRecord};
 pub use types::{GroupMilestone, MemberAchievement, MilestoneRecord, AchievementRecord, MemberStats};
