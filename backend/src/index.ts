@@ -6,25 +6,15 @@ import { errorHandler } from './middleware/errorHandler'
 import { requestLogger } from './middleware/requestLogger'
 import { logger } from './utils/logger'
 import { groupsRouter } from './routes/groups'
+import { healthRouter } from './routes/health'
 import { webhooksRouter } from './routes/webhooks'
 import { authRouter } from './routes/auth'
-import { analyticsRouter } from './routes/analytics'
-import { emailRouter } from './routes/email'
 import { jobsRouter } from './routes/jobs'
-import { gamificationRouter } from './routes/gamification'
-import { goalsRouter } from './routes/goals'
 import { setupSwagger } from './swagger'
-import { startWorkers, stopWorkers } from './jobs/jobWorkers'
-import { startScheduler, stopScheduler } from './cron/scheduler'
-import { kycRouter } from './routes/kyc'
-import { disputesRouter } from './routes/disputes'
-
-// Use the working limiters instead of the broken upstream ones
 import { apiLimiter, strictLimiter } from './middleware/rateLimiter'
-
-// Our Feature: Monitoring & Health
-import { healthRouter } from './routes/health'
-import { metricsMiddleware } from './middleware/metrics'
+// Import queue and job modules
+import { initializeQueues } from './queues'
+import { startJobProcessors } from './jobs'
 
 dotenv.config()
 
@@ -54,42 +44,23 @@ app.use('/api', apiLimiter)
 setupSwagger(app)
 
 // Routes
-app.use('/', healthRouter)
+app.use('/health', healthRouter)
 app.use('/api/auth', strictLimiter, authRouter)
 app.use('/api/groups', groupsRouter)
 app.use('/api/webhooks', strictLimiter, webhooksRouter)
-app.use('/api/analytics', analyticsRouter)
-app.use('/api/email', emailRouter)
-app.use('/api/jobs', jobsRouter)
-app.use('/api/gamification', gamificationRouter)
-app.use('/api/goals', goalsRouter)
-app.use('/api/kyc', kycRouter)
-app.use('/api/disputes', disputesRouter)
-
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Not found',
-  })
-})
+app.use('/jobs', jobsRouter)
 
 // Error handling
 app.use(errorHandler)
 
-// Start server
-const server = app.listen(PORT, () => {
-  logger.info(`Server started on port ${PORT}`, { env: process.env.NODE_ENV || 'development' })
+// Initialize queues and workers
+initializeQueues()
+startJobProcessors()
 
-  try {
-    startWorkers()
-    startScheduler()
-    logger.info('Background jobs and cron scheduler started')
-  } catch (err) {
-    logger.error('Failed to start background jobs', {
-      error: err instanceof Error ? err.message : String(err),
-    })
-  }
+// Start server
+app.listen(PORT, () => {
+  logger.info(`Server started on port ${PORT}`, { env: process.env.NODE_ENV || 'development' })
+  logger.info('Job queue system initialized and ready')
 })
 
 // Graceful shutdown
