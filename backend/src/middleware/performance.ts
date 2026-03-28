@@ -143,3 +143,113 @@ export function getRouteMetrics() {
     errorRate: parseFloat(((stats.errors / stats.count) * 100).toFixed(2)),
   })).sort((a, b) => b.avgDuration - a.avgDuration)
 }
+
+export interface Recommendation {
+  severity: 'critical' | 'warning' | 'info'
+  category: 'api' | 'database' | 'memory' | 'cpu' | 'error-rate'
+  message: string
+  detail: string
+}
+
+/**
+ * Analyze current metrics and return actionable optimization recommendations.
+ */
+export function getRecommendations(): Recommendation[] {
+  const recommendations: Recommendation[] = []
+  const system = getSystemMetrics()
+  const requests = getRequestMetrics()
+  const routes = getRouteMetrics()
+
+  // ── API response time ──────────────────────────────────────────────────────
+  if (requests.p99 > BUDGETS.criticalResponseTime) {
+    recommendations.push({
+      severity: 'critical',
+      category: 'api',
+      message: `p99 response time is ${requests.p99}ms — exceeds critical budget of ${BUDGETS.criticalResponseTime}ms`,
+      detail: 'Investigate slow routes below. Consider adding caching (Redis), database indexes, or horizontal scaling.',
+    })
+  } else if (requests.p95 > BUDGETS.apiResponseTime) {
+    recommendations.push({
+      severity: 'warning',
+      category: 'api',
+      message: `p95 response time is ${requests.p95}ms — exceeds budget of ${BUDGETS.apiResponseTime}ms`,
+      detail: 'Review the slowest routes and add response caching or query optimization.',
+    })
+  }
+
+  // ── Slow routes ────────────────────────────────────────────────────────────
+  for (const route of routes.slice(0, 3)) {
+    if (route.avgDuration > BUDGETS.apiResponseTime) {
+      recommendations.push({
+        severity: route.avgDuration > BUDGETS.criticalResponseTime ? 'critical' : 'warning',
+        category: 'api',
+        message: `Route "${route.route}" avg ${route.avgDuration}ms (${route.count} requests)`,
+        detail: 'Add route-level caching, optimize database queries, or move heavy work to a background job.',
+      })
+    }
+  }
+
+  // ── Error rate ─────────────────────────────────────────────────────────────
+  if (requests.errorRate > 5) {
+    recommendations.push({
+      severity: 'critical',
+      category: 'error-rate',
+      message: `Error rate is ${requests.errorRate}% — above 5% threshold`,
+      detail: 'Check application logs and Sentry for recurring errors. High error rates degrade user experience.',
+    })
+  } else if (requests.errorRate > 1) {
+    recommendations.push({
+      severity: 'warning',
+      category: 'error-rate',
+      message: `Error rate is ${requests.errorRate}% — above 1% target`,
+      detail: 'Review recent error logs. Consider adding retry logic for transient failures.',
+    })
+  }
+
+  // ── Memory ─────────────────────────────────────────────────────────────────
+  const heapPercent = (system.memory.heapUsed / system.memory.heapTotal) * 100
+  if (heapPercent > 90) {
+    recommendations.push({
+      severity: 'critical',
+      category: 'memory',
+      message: `Heap usage is ${heapPercent.toFixed(1)}% (${system.memory.heapUsed}MB / ${system.memory.heapTotal}MB)`,
+      detail: 'Memory pressure is critical. Check for memory leaks, large in-memory caches, or increase Node.js heap size with --max-old-space-size.',
+    })
+  } else if (heapPercent > 75) {
+    recommendations.push({
+      severity: 'warning',
+      category: 'memory',
+      message: `Heap usage is ${heapPercent.toFixed(1)}% (${system.memory.heapUsed}MB / ${system.memory.heapTotal}MB)`,
+      detail: 'Consider reviewing in-memory data structures and enabling heap snapshots to detect leaks.',
+    })
+  }
+
+  // ── CPU ────────────────────────────────────────────────────────────────────
+  if (system.cpu.usagePercent > 80) {
+    recommendations.push({
+      severity: 'critical',
+      category: 'cpu',
+      message: `CPU usage is ${system.cpu.usagePercent}% across ${system.cpu.cores} cores`,
+      detail: 'CPU is saturated. Move CPU-intensive work to worker threads or background jobs, and consider horizontal scaling.',
+    })
+  } else if (system.cpu.usagePercent > 60) {
+    recommendations.push({
+      severity: 'warning',
+      category: 'cpu',
+      message: `CPU usage is ${system.cpu.usagePercent}% across ${system.cpu.cores} cores`,
+      detail: 'CPU load is elevated. Profile hot code paths and consider caching computed results.',
+    })
+  }
+
+  // ── All good ───────────────────────────────────────────────────────────────
+  if (recommendations.length === 0) {
+    recommendations.push({
+      severity: 'info',
+      category: 'api',
+      message: 'All metrics are within budget',
+      detail: `p95: ${requests.p95}ms, error rate: ${requests.errorRate}%, heap: ${heapPercent.toFixed(1)}%, CPU: ${system.cpu.usagePercent}%`,
+    })
+  }
+
+  return recommendations
+}

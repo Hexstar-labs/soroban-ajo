@@ -3,6 +3,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import dotenv from 'dotenv'
 import { initSentry, Sentry } from './config/sentry'
+import { initDatadog } from './config/datadog'
 import { errorHandler } from './middleware/errorHandler'
 import { requestLogger } from './middleware/requestLogger'
 // import { setupSwagger } from './middleware/swagger'
@@ -25,6 +26,8 @@ dotenv.config()
 
 // Init Sentry before anything else
 initSentry()
+// Init DataDog APM (no-op if DD_API_KEY not set)
+initDatadog()
 
 const app = express()
 const PORT = process.env.PORT || 3001

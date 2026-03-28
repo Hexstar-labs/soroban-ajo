@@ -1,11 +1,11 @@
 import { Router } from 'express'
-import { getSystemMetrics, getRequestMetrics, getRouteMetrics } from '../middleware/performance'
+import { getSystemMetrics, getRequestMetrics, getRouteMetrics, getRecommendations } from '../middleware/performance'
 
 export const metricsRouter = Router()
 
 /**
  * GET /api/metrics
- * Returns aggregated performance metrics dashboard data
+ * Full performance dashboard — system, requests, routes, recommendations
  */
 metricsRouter.get('/', (_req, res) => {
   res.json({
@@ -14,6 +14,7 @@ metricsRouter.get('/', (_req, res) => {
       system: getSystemMetrics(),
       requests: getRequestMetrics(),
       routes: getRouteMetrics(),
+      recommendations: getRecommendations(),
       timestamp: new Date().toISOString(),
     },
   })
@@ -21,7 +22,7 @@ metricsRouter.get('/', (_req, res) => {
 
 /**
  * GET /api/metrics/system
- * Returns system-level metrics (CPU, memory, uptime)
+ * System-level metrics (CPU, memory, uptime)
  */
 metricsRouter.get('/system', (_req, res) => {
   res.json({ success: true, data: getSystemMetrics() })
@@ -29,7 +30,7 @@ metricsRouter.get('/system', (_req, res) => {
 
 /**
  * GET /api/metrics/requests
- * Returns HTTP request performance metrics
+ * HTTP request performance metrics (avg, p95, p99, error rate, throughput)
  */
 metricsRouter.get('/requests', (_req, res) => {
   res.json({ success: true, data: getRequestMetrics() })
@@ -37,8 +38,30 @@ metricsRouter.get('/requests', (_req, res) => {
 
 /**
  * GET /api/metrics/routes
- * Returns per-route performance breakdown
+ * Per-route performance breakdown sorted by avg duration
  */
 metricsRouter.get('/routes', (_req, res) => {
   res.json({ success: true, data: getRouteMetrics() })
+})
+
+/**
+ * GET /api/metrics/recommendations
+ * Actionable optimization recommendations based on current metrics
+ */
+metricsRouter.get('/recommendations', (_req, res) => {
+  const recommendations = getRecommendations()
+  const hasCritical = recommendations.some(r => r.severity === 'critical')
+  res.json({
+    success: true,
+    data: {
+      recommendations,
+      summary: {
+        total: recommendations.length,
+        critical: recommendations.filter(r => r.severity === 'critical').length,
+        warnings: recommendations.filter(r => r.severity === 'warning').length,
+        healthy: !hasCritical,
+      },
+      timestamp: new Date().toISOString(),
+    },
+  })
 })
