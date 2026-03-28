@@ -113,8 +113,10 @@ export const GroupCard: React.FC<GroupCardProps> = ({
     <div
       className={`${cardClass} relative overflow-hidden group`}
       onClick={onClick}
+      role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : -1}
-      onKeyDown={onClick ? (e) => e.key === 'Enter' && onClick() : undefined}
+      aria-label={onClick ? `${groupName} group, ${config.label} status` : undefined}
+      onKeyDown={onClick ? (e) => (e.key === 'Enter' || e.key === ' ') && onClick() : undefined}
     >
       {/* Top Accent Bar */}
       <div
@@ -147,8 +149,11 @@ export const GroupCard: React.FC<GroupCardProps> = ({
         </div>
 
         {/* Progress Bar */}
-        <div className="progress-bar">
-          <div className="progress-bar-fill" style={{ width: `${memberPercent}%` }} />
+        <div className="progress-bar" role="progressbar" aria-valuenow={memberPercent} aria-valuemin={0} aria-valuemax={100} aria-label={`${memberCount} of ${maxMembers} members`}>
+          <div
+            className="progress-bar-fill"
+            style={{ width: `${memberPercent}%` }}
+          />
         </div>
 
         {/* Contributions */}
@@ -167,6 +172,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({
       {/* Action Button */}
       <button
         className={`btn-primary w-full ${isCompact ? 'mt-4 py-2 text-xs' : 'mt-5 py-2.5 text-sm'}`}
+        aria-label={`View details for ${groupName}`}
         onClick={(e) => {
           e.stopPropagation()
           onClick?.()

@@ -64,6 +64,22 @@ body {
   min-height: 100vh;
 }
 
+/* Smooth theme transitions across the app */
+html,
+body {
+  transition:
+    background-color 250ms ease,
+    color 250ms ease;
+}
+
+*,
+*::before,
+*::after {
+  transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+  transition-duration: 250ms;
+  transition-timing-function: ease;
+}
+
 /* Brand Patterns */
 .pattern-grid {
   background-image: url('/patterns/grid.svg');
@@ -217,18 +233,20 @@ body {
     border-radius: 0.75rem;
     padding: 2px;
     background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-    /* Screen Reader Only */
-    .sr-only {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      margin: -1px;
-      overflow: hidden;
-      clip: rect(0, 0, 0, 0);
-      white-space: nowrap;
-      border-width: 0;
-    }
+  }
+
+  /* Screen Reader Only */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
 
     .not-sr-only {
       position: static;
