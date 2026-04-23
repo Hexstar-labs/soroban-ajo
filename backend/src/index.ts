@@ -54,21 +54,9 @@ app.use('/api/jobs', jobsRouter)
 import { disputesRouter } from './routes/disputes'
 app.use('/api/disputes', disputesRouter)
 
-// Backups
-import { backupRouter } from './routes/backup'
-app.use('/api/backups', backupRouter)
-
-// Audit
-import { auditRouter } from './routes/audit'
-app.use('/api/audit', auditRouter)
-
-// i18n
-import { i18nRouter } from './routes/i18n'
-app.use('/api/i18n', i18nRouter)
-
-// Cache
-import { cacheRouter } from './routes/cache'
-app.use('/api/cache', cacheRouter)
+// Templates
+import { templatesRouter } from './routes/templates'
+app.use('/api/templates', templatesRouter)
 
 // 404 handler
 app.use((req, res) => {

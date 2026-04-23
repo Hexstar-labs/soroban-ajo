@@ -2,6 +2,7 @@ import * as cron from 'node-cron'
 import { createQueue, getQueue } from '../queues/queueManager'
 import { SYNC_QUEUE_NAME } from '../queues/syncQueue'
 import { REMINDER_QUEUE_NAME } from '../jobs/workers'
+import { addScheduleJob } from '../queues/scheduleQueue'
 import { logger } from '../utils/logger'
 import { backupService } from '../services/backupService'
 
@@ -96,33 +97,21 @@ export function startScheduler(): void {
     })
   )
 
-  // Full database backup - daily at 02:30 UTC
+  // ── Contribution Schedule jobs ──────────────────────────────────────────
+
+  // Grace period enforcement — every 15 minutes
   scheduledTasks.push(
-    cron.schedule('30 2 * * *', async () => {
-      logger.info('Cron: triggering daily full backup')
-      try {
-        const result = await backupService.triggerFullBackup()
-        logger.info('Cron: full backup started', { backupId: result.id })
-      } catch (err) {
-        logger.error('Cron: failed to trigger full backup', {
-          error: err instanceof Error ? err.message : String(err),
-        })
-      }
+    cron.schedule('*/15 * * * *', async () => {
+      logger.info('Cron: scheduling grace period enforcement')
+      await addScheduleJob({ type: 'enforce_grace_periods' })
     })
   )
 
-  // Purge old backup records - weekly on Sunday at 03:00 UTC
+  // Due-date reminders — every hour (catches schedules due in the next 24 h)
   scheduledTasks.push(
-    cron.schedule('0 3 * * 0', async () => {
-      logger.info('Cron: purging old backup records')
-      try {
-        const result = await backupService.purgeOldBackups(30)
-        logger.info('Cron: backup purge complete', { deleted: result.deleted })
-      } catch (err) {
-        logger.error('Cron: failed to purge old backups', {
-          error: err instanceof Error ? err.message : String(err),
-        })
-      }
+    cron.schedule('0 * * * *', async () => {
+      logger.info('Cron: scheduling contribution due reminders')
+      await addScheduleJob({ type: 'send_due_reminders' })
     })
   )
 
