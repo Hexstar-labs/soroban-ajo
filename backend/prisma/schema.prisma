@@ -13,6 +13,14 @@ model User {
   twoFactorEnabled   Boolean   @default(false)
   twoFactorSecret    String?
   twoFactorEnabledAt DateTime?
+  // 2FA method: totp | sms | null
+  twoFactorMethod    String?
+  // SMS 2FA
+  phoneNumber        String?
+  smsOtpHash         String?
+  smsOtpExpiresAt    DateTime?
+  // Backup codes (JSON array of hashed codes)
+  backupCodes        String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
