@@ -178,24 +178,12 @@ pub enum AjoError {
     /// The caller is not a member of the dispute's group.
     NotDisputeMember = 56,
 
-    // ── Escrow errors ─────────────────────────────────────────────────────
+    // ── Reputation errors ─────────────────────────────────────────────────
 
-    /// The specified escrow was not found in storage.
-    EscrowNotFound = 57,
+    /// No reputation record found for this member.
+    ReputationNotFound = 57,
 
-    /// The escrow is not in an active state (already released, refunded, or disputed).
-    EscrowNotActive = 58,
-
-    /// The release condition has not been met yet (e.g., time lock not expired).
-    EscrowConditionNotMet = 59,
-
-    /// Only the depositor can perform this action on the escrow.
-    NotEscrowDepositor = 60,
-
-    /// Only the beneficiary can perform this action on the escrow.
-    NotEscrowBeneficiary = 61,
-
-    /// The escrow already has an active dispute.
-    EscrowAlreadyDisputed = 62,
+    /// Member's credit score is below the group's minimum requirement.
+    InsufficientCreditScore = 58,
 }
 

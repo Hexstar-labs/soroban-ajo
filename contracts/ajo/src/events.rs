@@ -265,32 +265,29 @@ pub fn emit_dispute_resolved(
     env.events().publish(topics, (group_id, resolution));
 }
 
-// ── Escrow events ─────────────────────────────────────────────────────────
+// ── Reputation events ─────────────────────────────────────────────────────
 
-pub fn emit_escrow_created(env: &Env, escrow_id: u64, depositor: &Address, beneficiary: &Address, amount: i128) {
-    env.events().publish(
-        (symbol_short!("ESC_NEW"), escrow_id),
-        (depositor, beneficiary, amount),
-    );
+/// Emit an event when a member's reputation record is updated.
+///
+/// `tier` is the numeric value of the new [`ReputationTier`](crate::types::ReputationTier).
+pub fn emit_reputation_updated(env: &Env, member: &Address, credit_score: u32, tier: u32) {
+    let topics = (symbol_short!("repupd"),);
+    env.events().publish(topics, (member, credit_score, tier));
 }
 
-pub fn emit_escrow_released(env: &Env, escrow_id: u64, beneficiary: &Address, amount: i128) {
-    env.events().publish(
-        (symbol_short!("ESC_REL"), escrow_id),
-        (beneficiary, amount),
-    );
+/// Emit an event when a member's credit score changes.
+pub fn emit_credit_score_changed(
+    env: &Env,
+    member: &Address,
+    old_score: u32,
+    new_score: u32,
+) {
+    let topics = (symbol_short!("scoreChg"),);
+    env.events().publish(topics, (member, old_score, new_score));
 }
 
-pub fn emit_escrow_refunded(env: &Env, escrow_id: u64, depositor: &Address, amount: i128) {
-    env.events().publish(
-        (symbol_short!("ESC_RFD"), escrow_id),
-        (depositor, amount),
-    );
-}
-
-pub fn emit_escrow_disputed(env: &Env, escrow_id: u64, dispute_id: u64, filer: &Address) {
-    env.events().publish(
-        (symbol_short!("ESC_DIS"), escrow_id),
-        (dispute_id, filer),
-    );
+/// Emit an event when a member advances to a higher reputation tier.
+pub fn emit_tier_upgraded(env: &Env, member: &Address, old_tier: u32, new_tier: u32) {
+    let topics = (symbol_short!("tierUp"),);
+    env.events().publish(topics, (member, old_tier, new_tier));
 }

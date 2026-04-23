@@ -6,7 +6,8 @@ use crate::pausable;
 use crate::storage;
 use crate::types::{
     AchievementRecord, Group, GroupAccessType, GroupMetadata, GroupStatus, MemberStats,
-    MilestoneRecord, PayoutOrderingStrategy,
+    MilestoneRecord, PayoutOrderingStrategy, ReputationScore, CreditScoreSnapshot,
+    PaymentHistoryEntry,
 };
 use crate::utils;
 
@@ -480,6 +481,18 @@ impl AjoContract {
             events::emit_achievement_earned(&env, &member, record.achievement as u32, group_id_cached);
         }
 
+        // Record payment history entry and update on-chain reputation
+        crate::reputation::record_payment_event(
+            &env,
+            &member,
+            group_id_cached,
+            current_cycle,
+            contribution_amount,
+            false, // on-time contribution
+            false,
+        );
+        let _ = crate::reputation::update_member_reputation(&env, &member);
+
         Ok(())
     }
 
@@ -680,8 +693,22 @@ impl AjoContract {
                     .unwrap_or_else(|| utils::default_member_stats(&env, &member));
                 stats.total_groups_completed += 1;
                 storage::store_member_stats(&env, &member, &stats);
+                // Refresh reputation for every member on group completion
+                let _ = crate::reputation::update_member_reputation(&env, &member);
             }
         }
+
+        // Record payout receipt in payment history and refresh recipient reputation
+        crate::reputation::record_payment_event(
+            &env,
+            &payout_recipient,
+            group_id_cached,
+            current_cycle,
+            payout_amount,
+            false,
+            true, // is_payout
+        );
+        let _ = crate::reputation::update_member_reputation(&env, &payout_recipient);
 
         Ok(())
     }
@@ -2558,319 +2585,120 @@ pub fn get_refund_record(
         templates
     }
 
-    // ── Escrow functions ──────────────────────────────────────────────────
+    // ── Reputation system ─────────────────────────────────────────────────────
 
-    /// Create an escrow that holds funds until a release condition is met.
+    /// Get the full on-chain reputation record for a member.
     ///
-    /// The depositor transfers `amount` tokens into the contract. Funds are
-    /// locked until:
-    /// - `TimeLock`: `release_time` has passed and `release_escrow` is called.
-    /// - `ManualApproval`: the depositor explicitly calls `release_escrow`.
-    /// - `GroupCycleComplete`: the associated group cycle completes and
-    ///   `release_escrow` is called.
+    /// Returns the stored [`ReputationScore`] if one exists, or a default
+    /// zero-score record for members who have not yet built any history.
+    /// This is a pure read — it never modifies state.
     ///
     /// # Arguments
-    /// * `depositor` – address funding the escrow (must sign)
-    /// * `beneficiary` – address that receives funds on release
-    /// * `token_address` – SAC token to hold
-    /// * `amount` – amount to lock (> 0)
-    /// * `condition` – release condition type
-    /// * `release_time` – Unix timestamp for time-lock / dispute deadline
-    /// * `group_id` – associated group (0 for standalone escrows)
+    /// * `env`    - The Soroban contract environment
+    /// * `member` - The member's Stellar address
     ///
     /// # Returns
-    /// The new escrow ID.
-    pub fn create_escrow(
-        env: Env,
-        depositor: Address,
-        beneficiary: Address,
-        token_address: Address,
-        amount: i128,
-        condition: crate::types::EscrowCondition,
-        release_time: u64,
-        group_id: u64,
-    ) -> Result<u64, AjoError> {
-        pausable::ensure_not_paused(&env)?;
-        depositor.require_auth();
-
-        if amount <= 0 {
-            return Err(AjoError::ContributionAmountZero);
-        }
-
-        // Transfer funds from depositor into the contract
-        crate::token::transfer_token(
-            &env,
-            &token_address,
-            &depositor,
-            &env.current_contract_address(),
-            amount,
-        )?;
-
-        let now = utils::get_current_timestamp(&env);
-        let escrow_id = storage::get_next_escrow_id(&env);
-
-        let escrow = crate::types::Escrow {
-            id: escrow_id,
-            group_id,
-            depositor: depositor.clone(),
-            beneficiary: beneficiary.clone(),
-            token_address,
-            amount,
-            condition,
-            release_time,
-            status: crate::types::EscrowStatus::Active,
-            created_at: now,
-            dispute_id: 0,
-        };
-
-        storage::store_escrow(&env, escrow_id, &escrow);
-
-        // Index under group if applicable
-        if group_id != 0 {
-            let mut ids = storage::get_group_escrow_ids(&env, group_id);
-            ids.push_back(escrow_id);
-            storage::store_group_escrow_ids(&env, group_id, &ids);
-        }
-
-        events::emit_escrow_created(&env, escrow_id, &depositor, &beneficiary, amount);
-
-        Ok(escrow_id)
+    /// The member's current [`ReputationScore`]
+    pub fn get_reputation(env: Env, member: Address) -> crate::types::ReputationScore {
+        crate::reputation::get_reputation(&env, &member)
     }
 
-    /// Release escrowed funds to the beneficiary when the condition is satisfied.
+    /// Get the current credit score for a member (0–1000).
     ///
-    /// For `TimeLock`: callable by anyone once `release_time` has passed.
-    /// For `ManualApproval`: callable only by the depositor.
-    /// For `GroupCycleComplete`: callable by anyone once the linked group cycle
-    /// is complete.
-    pub fn release_escrow(env: Env, caller: Address, escrow_id: u64) -> Result<(), AjoError> {
+    /// Convenience wrapper around [`get_reputation`] that returns only the
+    /// numeric score.  Returns 0 for members with no history.
+    ///
+    /// # Arguments
+    /// * `env`    - The Soroban contract environment
+    /// * `member` - The member's Stellar address
+    pub fn get_credit_score(env: Env, member: Address) -> u32 {
+        crate::reputation::get_reputation(&env, &member).credit_score
+    }
+
+    /// Get the payment history for a member.
+    ///
+    /// Returns an ordered list of [`PaymentHistoryEntry`] records covering
+    /// both contributions made and payouts received.  The list is capped at
+    /// [`MAX_PAYMENT_HISTORY`](crate::types::MAX_PAYMENT_HISTORY) entries
+    /// (oldest entries are dropped when the cap is reached).
+    ///
+    /// # Arguments
+    /// * `env`    - The Soroban contract environment
+    /// * `member` - The member's Stellar address
+    ///
+    /// # Returns
+    /// Vector of payment history entries, oldest first
+    pub fn get_payment_history(
+        env: Env,
+        member: Address,
+    ) -> soroban_sdk::Vec<crate::types::PaymentHistoryEntry> {
+        crate::reputation::get_payment_history(&env, &member)
+    }
+
+    /// Get the credit score snapshot history for a member.
+    ///
+    /// Returns an ordered list of [`CreditScoreSnapshot`] records showing
+    /// how the member's score has changed over time.  Capped at
+    /// [`MAX_SCORE_HISTORY`](crate::types::MAX_SCORE_HISTORY) entries.
+    ///
+    /// # Arguments
+    /// * `env`    - The Soroban contract environment
+    /// * `member` - The member's Stellar address
+    ///
+    /// # Returns
+    /// Vector of score snapshots, oldest first
+    pub fn get_credit_score_history(
+        env: Env,
+        member: Address,
+    ) -> soroban_sdk::Vec<crate::types::CreditScoreSnapshot> {
+        crate::reputation::get_credit_score_history(&env, &member)
+    }
+
+    /// Manually trigger a reputation recalculation for a member.
+    ///
+    /// Reputation is updated automatically on every contribution and payout,
+    /// but this function allows an explicit refresh — useful after admin
+    /// corrections or data migrations.
+    ///
+    /// # Arguments
+    /// * `env`    - The Soroban contract environment
+    /// * `caller` - The address requesting the refresh (must authenticate)
+    /// * `member` - The member whose reputation should be recalculated
+    ///
+    /// # Returns
+    /// The freshly computed [`ReputationScore`]
+    ///
+    /// # Errors
+    /// * `ContractPaused` - If the contract is paused
+    pub fn refresh_reputation(
+        env: Env,
+        caller: Address,
+        member: Address,
+    ) -> Result<crate::types::ReputationScore, AjoError> {
         pausable::ensure_not_paused(&env)?;
         caller.require_auth();
-
-        let mut escrow = storage::get_escrow(&env, escrow_id)
-            .ok_or(AjoError::EscrowNotFound)?;
-
-        if escrow.status != crate::types::EscrowStatus::Active {
-            return Err(AjoError::EscrowNotActive);
-        }
-
-        let now = utils::get_current_timestamp(&env);
-
-        match escrow.condition {
-            crate::types::EscrowCondition::TimeLock => {
-                if now < escrow.release_time {
-                    return Err(AjoError::EscrowConditionNotMet);
-                }
-            }
-            crate::types::EscrowCondition::ManualApproval => {
-                if caller != escrow.depositor {
-                    return Err(AjoError::NotEscrowDepositor);
-                }
-            }
-            crate::types::EscrowCondition::GroupCycleComplete => {
-                let group = storage::get_group(&env, escrow.group_id)
-                    .ok_or(AjoError::GroupNotFound)?;
-                if !group.is_complete {
-                    return Err(AjoError::EscrowConditionNotMet);
-                }
-            }
-        }
-
-        escrow.status = crate::types::EscrowStatus::Released;
-        storage::store_escrow(&env, escrow_id, &escrow);
-
-        crate::token::transfer_token(
-            &env,
-            &escrow.token_address,
-            &env.current_contract_address(),
-            &escrow.beneficiary,
-            escrow.amount,
-        )?;
-
-        events::emit_escrow_released(&env, escrow_id, &escrow.beneficiary, escrow.amount);
-
-        Ok(())
+        crate::reputation::update_member_reputation(&env, &member)
     }
 
-    /// Refund escrowed funds back to the depositor.
+    /// Check whether a member meets a minimum credit score requirement.
     ///
-    /// Only the depositor may call this, and only while the escrow is `Active`
-    /// (not disputed). For time-locked escrows the depositor can reclaim funds
-    /// before the lock expires by calling this function.
-    pub fn refund_escrow(env: Env, depositor: Address, escrow_id: u64) -> Result<(), AjoError> {
-        pausable::ensure_not_paused(&env)?;
-        depositor.require_auth();
-
-        let mut escrow = storage::get_escrow(&env, escrow_id)
-            .ok_or(AjoError::EscrowNotFound)?;
-
-        if escrow.status != crate::types::EscrowStatus::Active {
-            return Err(AjoError::EscrowNotActive);
-        }
-        if depositor != escrow.depositor {
-            return Err(AjoError::NotEscrowDepositor);
-        }
-
-        escrow.status = crate::types::EscrowStatus::Refunded;
-        storage::store_escrow(&env, escrow_id, &escrow);
-
-        crate::token::transfer_token(
-            &env,
-            &escrow.token_address,
-            &env.current_contract_address(),
-            &escrow.depositor,
-            escrow.amount,
-        )?;
-
-        events::emit_escrow_refunded(&env, escrow_id, &escrow.depositor, escrow.amount);
-
-        Ok(())
-    }
-
-    /// File a dispute on an active escrow, freezing the funds.
+    /// Returns `Ok(())` if the member's score is at or above `min_score`,
+    /// or if `min_score` is 0 (no requirement).  Useful for group creators
+    /// who want to gate membership on reputation.
     ///
-    /// Either the depositor or beneficiary may open a dispute. The escrow
-    /// transitions to `Disputed` and a linked dispute record is created.
-    /// Funds remain locked until `resolve_escrow_dispute` is called.
-    pub fn dispute_escrow(
+    /// # Arguments
+    /// * `env`       - The Soroban contract environment
+    /// * `member`    - The member to check
+    /// * `min_score` - Minimum required credit score (0 = no requirement)
+    ///
+    /// # Errors
+    /// * `InsufficientCreditScore` - If the member's score is below `min_score`
+    pub fn check_credit_requirement(
         env: Env,
-        filer: Address,
-        escrow_id: u64,
-        description: soroban_sdk::String,
-        evidence_hash: soroban_sdk::BytesN<32>,
-    ) -> Result<u64, AjoError> {
-        pausable::ensure_not_paused(&env)?;
-        filer.require_auth();
-
-        let mut escrow = storage::get_escrow(&env, escrow_id)
-            .ok_or(AjoError::EscrowNotFound)?;
-
-        if escrow.status != crate::types::EscrowStatus::Active {
-            return Err(AjoError::EscrowNotActive);
-        }
-        if filer != escrow.depositor && filer != escrow.beneficiary {
-            return Err(AjoError::NotEscrowDepositor);
-        }
-        if escrow.dispute_id != 0 {
-            return Err(AjoError::EscrowAlreadyDisputed);
-        }
-
-        let now = utils::get_current_timestamp(&env);
-        let dispute_id = storage::get_next_dispute_id(&env);
-
-        // Determine complainant/defendant based on who filed
-        let (complainant, defendant) = if filer == escrow.depositor {
-            (escrow.depositor.clone(), escrow.beneficiary.clone())
-        } else {
-            (escrow.beneficiary.clone(), escrow.depositor.clone())
-        };
-
-        let dispute = crate::types::Dispute {
-            id: dispute_id,
-            group_id: escrow.group_id,
-            dispute_type: crate::types::DisputeType::PayoutDispute,
-            complainant: complainant.clone(),
-            defendant: defendant.clone(),
-            description,
-            evidence_hash,
-            status: crate::types::DisputeStatus::Open,
-            created_at: now,
-            voting_deadline: now + crate::types::DISPUTE_VOTING_PERIOD,
-            votes_for_action: 0,
-            votes_against_action: 0,
-            proposed_resolution: crate::types::DisputeResolution::Refund,
-            final_resolution: None,
-        };
-
-        storage::store_dispute(&env, dispute_id, &dispute);
-
-        escrow.status = crate::types::EscrowStatus::Disputed;
-        escrow.dispute_id = dispute_id;
-        storage::store_escrow(&env, escrow_id, &escrow);
-
-        events::emit_escrow_disputed(&env, escrow_id, dispute_id, &filer);
-        events::emit_dispute_filed(&env, dispute_id, escrow.group_id, &complainant, &defendant);
-
-        Ok(dispute_id)
-    }
-
-    /// Resolve a disputed escrow after the voting period ends.
-    ///
-    /// If the dispute passes (≥66% votes for action), funds go to the
-    /// complainant (refund). Otherwise funds are released to the beneficiary.
-    pub fn resolve_escrow_dispute(
-        env: Env,
-        resolver: Address,
-        escrow_id: u64,
+        member: Address,
+        min_score: u32,
     ) -> Result<(), AjoError> {
-        pausable::ensure_not_paused(&env)?;
-        resolver.require_auth();
-
-        let mut escrow = storage::get_escrow(&env, escrow_id)
-            .ok_or(AjoError::EscrowNotFound)?;
-
-        if escrow.status != crate::types::EscrowStatus::Disputed {
-            return Err(AjoError::EscrowNotActive);
-        }
-
-        let mut dispute = storage::get_dispute(&env, escrow.dispute_id)
-            .ok_or(AjoError::DisputeNotFound)?;
-
-        let now = utils::get_current_timestamp(&env);
-        if now <= dispute.voting_deadline {
-            return Err(AjoError::VotingPeriodActive);
-        }
-
-        let total_votes = dispute.votes_for_action + dispute.votes_against_action;
-        let approved = total_votes > 0
-            && (dispute.votes_for_action * 100 / total_votes)
-                >= crate::types::DISPUTE_APPROVAL_THRESHOLD;
-
-        let (recipient, new_escrow_status, dispute_status, final_resolution) = if approved {
-            // Dispute upheld: refund to complainant (depositor)
-            (
-                escrow.depositor.clone(),
-                crate::types::EscrowStatus::Refunded,
-                crate::types::DisputeStatus::Resolved,
-                crate::types::DisputeResolution::Refund,
-            )
-        } else {
-            // Dispute rejected: release to beneficiary
-            (
-                escrow.beneficiary.clone(),
-                crate::types::EscrowStatus::Released,
-                crate::types::DisputeStatus::Rejected,
-                crate::types::DisputeResolution::NoAction,
-            )
-        };
-
-        dispute.status = dispute_status;
-        dispute.final_resolution = Some(final_resolution);
-        storage::store_dispute(&env, escrow.dispute_id, &dispute);
-
-        escrow.status = new_escrow_status;
-        storage::store_escrow(&env, escrow_id, &escrow);
-
-        crate::token::transfer_token(
-            &env,
-            &escrow.token_address,
-            &env.current_contract_address(),
-            &recipient,
-            escrow.amount,
-        )?;
-
-        events::emit_dispute_resolved(&env, escrow.dispute_id, escrow.group_id, final_resolution);
-
-        Ok(())
-    }
-
-    /// Retrieve an escrow by ID.
-    pub fn get_escrow(env: Env, escrow_id: u64) -> Result<crate::types::Escrow, AjoError> {
-        storage::get_escrow(&env, escrow_id).ok_or(AjoError::EscrowNotFound)
-    }
-
-    /// List all escrow IDs associated with a group.
-    pub fn get_group_escrows(env: Env, group_id: u64) -> Vec<u64> {
-        storage::get_group_escrow_ids(&env, group_id)
+        crate::reputation::check_credit_requirement(&env, &member, min_score)
     }
 }
+
