@@ -8,6 +8,7 @@ import { useAuthStore } from '../src/store/authStore';
 import { useBiometrics } from '../src/hooks/useBiometrics';
 import { BiometricPrompt } from '../src/components/BiometricPrompt';
 import { OfflineBanner } from '../src/components/OfflineBanner';
+import { TwoFactorScreen } from '../src/screens/auth/TwoFactorScreen';
 import { Button } from '../src/components/ui/Button';
 import { Colors, Spacing, Typography } from '../src/constants/theme';
 
@@ -63,7 +64,7 @@ const gateStyles = StyleSheet.create({
 });
 
 export default function RootLayout() {
-  const { initialize, isLoading, requiresBiometric } = useAuthStore();
+  const { initialize, isLoading, requiresBiometric, twoFactorChallenge } = useAuthStore();
 
   useEffect(() => {
     initialize().finally(() => SplashScreen.hideAsync());
@@ -72,6 +73,8 @@ export default function RootLayout() {
   if (isLoading) return null;
 
   if (requiresBiometric) return <BiometricGate />;
+
+  if (twoFactorChallenge) return <TwoFactorScreen />;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
