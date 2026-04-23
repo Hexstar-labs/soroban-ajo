@@ -3,6 +3,7 @@ import { createQueue, getQueue } from '../queues/queueManager'
 import { SYNC_QUEUE_NAME } from '../queues/syncQueue'
 import { REMINDER_QUEUE_NAME } from '../jobs/workers'
 import { logger } from '../utils/logger'
+import { backupService } from '../services/backupService'
 
 const ANALYTICS_QUEUE_NAME = 'analytics'
 
@@ -92,6 +93,36 @@ export function startScheduler(): void {
     cron.schedule('0 2 * * *', async () => {
       logger.info('Cron: scheduling database cleanup')
       await getAnalyticsQueue().add('cleanup', { type: 'cleanup' })
+    })
+  )
+
+  // Full database backup - daily at 02:30 UTC
+  scheduledTasks.push(
+    cron.schedule('30 2 * * *', async () => {
+      logger.info('Cron: triggering daily full backup')
+      try {
+        const result = await backupService.triggerFullBackup()
+        logger.info('Cron: full backup started', { backupId: result.id })
+      } catch (err) {
+        logger.error('Cron: failed to trigger full backup', {
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    })
+  )
+
+  // Purge old backup records - weekly on Sunday at 03:00 UTC
+  scheduledTasks.push(
+    cron.schedule('0 3 * * 0', async () => {
+      logger.info('Cron: purging old backup records')
+      try {
+        const result = await backupService.purgeOldBackups(30)
+        logger.info('Cron: backup purge complete', { deleted: result.deleted })
+      } catch (err) {
+        logger.error('Cron: failed to purge old backups', {
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
     })
   )
 

@@ -649,6 +649,25 @@ model ChatParticipant {
   @@index([userId])
 }
 
+model BackupRecord {
+  id            String    @id @default(cuid())
+  backupType    String    // FULL, WAL
+  status        String    @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, FAILED, VERIFIED
+  storagePath   String
+  sizeBytes     BigInt?
+  checksum      String?
+  encryptionKey String?   // Key ID reference (never the actual key)
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+  verifiedAt    DateTime?
+  errorMessage  String?
+  metadata      Json?     // postgres_version, start_lsn, end_lsn, etc.
+
+  @@index([backupType, status])
+  @@index([startedAt(sort: Desc)])
+  @@index([status])
+}
+
 model EventStore {
   id            String   @id @default(cuid())
   sequenceNumber Int     @default(autoincrement())

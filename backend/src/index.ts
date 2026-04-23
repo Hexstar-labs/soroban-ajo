@@ -54,6 +54,10 @@ app.use('/api/jobs', jobsRouter)
 import { disputesRouter } from './routes/disputes'
 app.use('/api/disputes', disputesRouter)
 
+// Backups
+import { backupRouter } from './routes/backup'
+app.use('/api/backups', backupRouter)
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
